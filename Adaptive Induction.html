@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Adaptive Induction</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            background-color: #121212;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+        #container {
+            display: flex;
+            align-items: center;
+        }
+        #drawing-area {
+            position: relative;
+            width: 600px;
+            height: 800px;
+            background-color: #1e1e1e;
+            border: 2px solid #888;
+            margin-right: 40px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        #sidebar {
+            width: 140px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #2b2b2b;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        #sidebar button {
+            width: 100px;
+            height: 50px;
+            margin: 15px 0;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            background-color: #3c3c3c;
+            color: #fff;
+            transition: none;
+        }
+        #sidebar button:hover {
+            background-color: #505050;
+        }
+        #sidebar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #sidebar button.active {
+            background-color: #505050;
+        }
+        .circle {
+            position: absolute;
+            border-radius: 50%;
+            border: 8px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 32px;
+            text-align: center;
+            overflow: hidden;
+            cursor: pointer;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .circle.selected {
+            border-width: 12px;
+        }
+        .popup, #timer-adjustment {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 350px;
+            background-color: #1e1e1e;
+            padding: 30px;
+            border: 2px solid #888;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+        }
+        .popup.active, #timer-adjustment.active {
+            display: block;
+        }
+        .popup h3, #timer-adjustment h3 {
+            color: #fff;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .popup button, #timer-adjustment button {
+            margin: 10px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #3c3c3c;
+            color: #fff;
+            transition: background-color 0.3s;
+        }
+        .popup button:hover, #timer-adjustment button:hover {
+            background-color: #505050;
+        }
+        .popup #unit-selection button {
+            width: 80px;
+            margin: 0 10px;
+        }
+        .popup p, #timer-adjustment p {
+            color: #fff;
+            text-align: center;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .popup .display, #timer-adjustment .display {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 32px;
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        #timer-adjustment .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #timer-adjustment .controls button {
+            width: 60px;
+            height: 60px;
+            font-size: 28px;
+        }
+        #timer-adjustment .controls span {
+            margin: 0 20px;
+            font-size: 28px;
+            color: #fff;
+            width: 100px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="drawing-area"></div>
+        <div id="sidebar">
+            <button id="timer-button" disabled>Timer</button>
+            <button id="scale-button">Scale</button>
+            <button id="delete-button" disabled>Delete</button>
+        </div>
+    </div>
+    <div id="scale-popup" class="popup">
+        <h3>Scale</h3>
+        <div id="unit-selection">
+            Unit:
+            <button id="unit-ml">ml</button>
+            <button id="unit-g">g</button>
+        </div>
+        <div class="display">
+            <span id="weight-value">0000</span> <span id="unit-label">ml</span>
+        </div>
+        <button id="zero-button">Zero</button>
+        <button id="done-button">Close</button>
+    </div>
+    <div id="timer-adjustment" class="popup">
+        <h3>Set Timer</h3>
+        <div class="controls">
+            <button id="time-minus">-</button>
+            <span id="time-value">0</span> sec
+            <button id="time-plus">+</button>
+        </div>
+        <button id="time-confirm">Confirm</button>
+    </div>
+    <script>
+        var da = document.getElementById('drawing-area');
+        var tb = document.getElementById('timer-button');
+        var sb = document.getElementById('scale-button');
+        var db = document.getElementById('delete-button');
+
+        var sp = document.getElementById('scale-popup');
+        var um = document.getElementById('unit-ml');
+        var ug = document.getElementById('unit-g');
+        var wv = document.getElementById('weight-value');
+        var ul = document.getElementById('unit-label');
+        var zb = document.getElementById('zero-button');
+        var dbt = document.getElementById('done-button');
+
+        var ta = document.getElementById('timer-adjustment');
+        var tm = document.getElementById('time-minus');
+        var tp = document.getElementById('time-plus');
+        var tv = document.getElementById('time-value');
+        var tc = document.getElementById('time-confirm');
+
+        var cs = [];
+        var sc = null;
+        var unit = 'ml';
+        var ts = 0;
+        var cw = 0;
+
+        da.addEventListener('click', function(event) {
+            if (sp.classList.contains('active')) {
+                var rw = Math.floor(Math.random() * 1501);
+                cw = rw;
+                wv.textContent = cw.toString().padStart(4, '0');
+                return;
+            }
+
+            if (sc) {
+                deselectCircle();
+                return;
+            }
+
+            var rect = da.getBoundingClientRect();
+            var x = event.clientX - rect.left;
+            var y = event.clientY - rect.top;
+
+            var minSize = 250;
+            var maxSize = 300;
+            var size = Math.floor(Math.random() * (maxSize - minSize + 1)) + minSize;
+
+            var nc = {
+                x: x - size / 2,
+                y: y - size / 2,
+                size: size,
+                color: '#fff',
+                element: null,
+                timer: null,
+                timeLeft: null,
+            };
+
+            if (nc.x < 0 || nc.y < 0 ||
+                nc.x + size > da.clientWidth ||
+                nc.y + size > da.clientHeight) {
+                return;
+            }
+
+            for (var i = 0; i < cs.length; i++) {
+                var c = cs[i];
+                var dx = (nc.x + size / 2) - (c.x + c.size / 2);
+                var dy = (nc.y + size / 2) - (c.y + c.size / 2);
+                var distance = Math.hypot(dx, dy);
+                if (distance < (size + c.size) / 2 + 10) {
+                    return;
+                }
+            }
+
+            var ce = document.createElement('div');
+            ce.classList.add('circle');
+            ce.style.width = size + 'px';
+            ce.style.height = size + 'px';
+            ce.style.left = nc.x + 'px';
+            ce.style.top = nc.y + 'px';
+            ce.style.borderColor = nc.color;
+            da.appendChild(ce);
+
+            nc.element = ce;
+
+            ce.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (sc === nc) {
+                    toggleCircleColor(nc);
+                } else {
+                    selectCircle(nc);
+                }
+            });
+
+            cs.push(nc);
+        });
+
+        function selectCircle(c) {
+            if (sc && sc !== c) {
+                sc.element.classList.remove('selected');
+            }
+            sc = c;
+            c.element.classList.add('selected');
+            tb.disabled = false;
+            db.disabled = false;
+        }
+
+        function deselectCircle() {
+            if (sc) {
+                sc.element.classList.remove('selected');
+                sc = null;
+                tb.disabled = true;
+                db.disabled = true;
+            }
+        }
+
+        function toggleCircleColor(c) {
+            if (c.color === '#fff') {
+                c.color = '#f00';
+            } else {
+                c.color = '#fff';
+            }
+            c.element.style.borderColor = c.color;
+        }
+
+        sb.addEventListener('click', function() {
+            sp.classList.add('active');
+            wv.textContent = cw.toString().padStart(4, '0');
+            ul.textContent = unit;
+        });
+
+        um.addEventListener('click', function() {
+            unit = 'ml';
+            ul.textContent = unit;
+            convertWeight();
+        });
+
+        ug.addEventListener('click', function() {
+            unit = 'g';
+            ul.textContent = unit;
+            convertWeight();
+        });
+
+        zb.addEventListener('click', function() {
+            cw = 0;
+            wv.textContent = cw.toString().padStart(4, '0');
+        });
+
+        function convertWeight() {
+            if (unit === 'ml') {
+                cw = Math.round(cw * 0.97);
+            } else {
+                cw = Math.round(cw * 1.03);
+            }
+            wv.textContent = cw.toString().padStart(4, '0');
+        }
+
+        dbt.addEventListener('click', function() {
+            sp.classList.remove('active');
+        });
+
+        tb.addEventListener('click', function() {
+            if (sc) {
+                ta.classList.add('active');
+                ts = sc.timeLeft ? sc.timeLeft : 0;
+                tv.textContent = ts;
+            }
+        });
+
+        tp.addEventListener('click', function() {
+            if (ts < 5990) {
+                ts += 10;
+                tv.textContent = ts;
+            }
+        });
+
+        tm.addEventListener('click', function() {
+            if (ts >= 10) {
+                ts -= 10;
+            } else {
+                ts = 0;
+            }
+            tv.textContent = ts;
+        });
+
+        tc.addEventListener('click', function() {
+            ta.classList.remove('active');
+            if (ts > 0) {
+                startCircleTimer(sc, ts);
+            } else {
+                if (sc.timer) {
+                    clearInterval(sc.timer);
+                    sc.timer = null;
+                    sc.timeLeft = null;
+                    sc.element.textContent = '';
+                }
+            }
+            ts = 0;
+        });
+
+        function startCircleTimer(c, duration) {
+            if (c.timer) {
+                clearInterval(c.timer);
+            }
+            c.timeLeft = duration;
+            if (c.color === '#fff') {
+                c.color = '#f00';
+                c.element.style.borderColor = '#f00';
+            }
+            updateCircleTimeDisplay(c);
+
+            c.timer = setInterval(function() {
+                c.timeLeft -= 1;
+                if (c.timeLeft <= 0) {
+                    clearInterval(c.timer);
+                    c.timer = null;
+                    c.color = '#fff';
+                    c.element.style.borderColor = '#fff';
+                    c.element.textContent = 'OFF';
+                    setTimeout(function() {
+                        c.element.textContent = '';
+                    }, 10000);
+                } else {
+                    updateCircleTimeDisplay(c);
+                }
+            }, 1000);
+        }
+
+        function updateCircleTimeDisplay(c) {
+            var minutes = Math.floor(c.timeLeft / 60);
+            var seconds = c.timeLeft % 60;
+            c.element.textContent = minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0');
+        }
+
+        db.addEventListener('click', function() {
+            if (sc) {
+                if (sc.timer) {
+                    clearInterval(sc.timer);
+                }
+                da.removeChild(sc.element);
+                var index = cs.indexOf(sc);
+                if (index > -1) {
+                    cs.splice(index, 1);
+                }
+                deselectCircle();
+            }
+        });
+    </script>
+</body>
+</html>
